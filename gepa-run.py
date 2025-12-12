@@ -14,8 +14,9 @@ from transformers import (
 import wandb
 
 import gepa
-from util_data import init_math500
+from util_data import init_math500, init_aime2025, init_amc23
 
+from .math_grader import grade_answer
 
 # ==============================
 # 1. 모델 로딩 / task_lm 생성
@@ -102,7 +103,7 @@ def build_model_and_tokenizer(model_name: str, cache_dir: str | None) -> tuple[A
         pad_id = 0
         pad_token = tokenizer.decode(pad_id)
         model.generation_config.pad_token_id = pad_id
-        model.generation_config.eos_token_id = eos_id
+        model.generation_config.eos_token_id = [eos_id, model.generation_config.eos_token_id]
 
         processor = AutoProcessor.from_pretrained(model_name)
     else:
@@ -157,7 +158,7 @@ def make_task_lm(model, tokenizer, processor=None):
             # apply_chat_template(..., return_tensors="pt") → 이미 input_ids 텐서 반환
             inputs = processor.apply_chat_template(
                 chat,
-                add_generation_prompt=True,
+                add_generation_prompt=True, tokenize=True, return_dict=True,
                 return_tensors="pt",
             ).to(DEVICE)
 
@@ -174,7 +175,9 @@ def make_task_lm(model, tokenizer, processor=None):
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=1024,
+                max_new_tokens=2048,
+                eos_token_id=model.config.eos_token_id,
+                pad_token_id=model.config.pad_token_id,                
             )
 
         # 🔹 디코딩은 tokenizer로 (Gemma도 tokenizer 공유)
@@ -198,25 +201,27 @@ def make_task_lm(model, tokenizer, processor=None):
 # ==============================
 
 def extract_final_answer(s: str) -> str:
-    start = s.find(r"\boxed{")
-    if start == -1:
-        return None
-    
-    i = start + len(r"\boxed{")
-    depth = 1
-    content = []
-    
-    while i < len(s) and depth > 0:
-        if s[i] == '{':
-            depth += 1
-        elif s[i] == '}':
-            depth -= 1
-            if depth == 0:
-                break
-        content.append(s[i])
-        i += 1
-    
-    return s.split('###')[-1]
+    if '\boxed{' in s:
+        start = s.find(r"\boxed{")
+        if start == -1:
+            return None
+        
+        i = start + len(r"\boxed{")
+        depth = 1
+        content = []
+        
+        while i < len(s) and depth > 0:
+            if s[i] == '{':
+                depth += 1
+            elif s[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            content.append(s[i])
+            i += 1
+        return ''.join(content)           
+    else:
+        return s.split('###')[-1].strip(' ')
 # def extract_final_answer(s: str) -> str:
 #     start = s.find(r"\boxed{")
 #     if start == -1:
@@ -241,6 +246,7 @@ def extract_final_answer(s: str) -> str:
 
 def evaluate_on_test(
     best_candidate: Dict[str, str],
+    dataset_name:str,
     testset: list[Dict[str, Any]],
     task_lm,
     save_jsonl: str,
@@ -260,7 +266,7 @@ def evaluate_on_test(
     with open(save_jsonl, "w", encoding="utf-8") as jsonl_f:
         for idx, inst in enumerate(testset):
             question = inst["input"]
-            gold = str(inst["answer"]).strip()
+            gold = str(inst["answer"].split('###')[-1]).strip()
 
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -270,7 +276,10 @@ def evaluate_on_test(
             model_output = task_lm(messages)
             pred = extract_final_answer(model_output)
 
-            correct = pred == gold
+            if dataset_name in ['amc23']:
+                correct = grade_answer(pred, gold)
+            else:
+                correct = pred == gold
             if correct:
                 num_correct += 1
 
@@ -349,7 +358,10 @@ def load_dataset_by_name(name: str, train_full_size:int):
     if name == "math500":
         return init_math500(train_full_size)
     elif name == 'aime2025':
-        return gepa.examples.aime.init_dataset()
+        return init_aime2025(train_full_size)
+    elif name == 'amc23':
+        return init_amc23(train_full_size)
+        
     else:
         raise KeyError(f"Unsupported dataset: {name}")
 
@@ -375,7 +387,7 @@ def parse_args():
         "--dataset",
         type=str,
         default="math500",
-        choices=["math500"],
+        choices=["math500", 'aime2025', 'amc23'],
         help="Which dataset loader to use",
     )
     parser.add_argument(
@@ -494,7 +506,8 @@ def main():
     #     """
     # }
 
-    use_merge=True
+    # use_merge=True
+    use_merge=False
     # --- GEPA 최적화 ---
     gepa_kwargs: Dict[str, Any] = dict(
         seed_candidate=seed_prompt,
@@ -555,6 +568,7 @@ def main():
 
     test_summary = evaluate_on_test(
         best_candidate=gepa_result.best_candidate,
+        dataset_name=dataset_name,
         testset=testset,
         task_lm=task_lm,
         save_jsonl=jsonl_path,
