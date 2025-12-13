@@ -14,9 +14,9 @@ from transformers import (
 import wandb
 
 import gepa
-from util_data import init_math500, init_aime2025, init_amc23
+from util_data import init_math500, init_aime2025, init_amc23, init_aime2024
 
-from .math_grader import grade_answer
+from src.math_grader import grade_answer
 
 # ==============================
 # 1. 모델 로딩 / task_lm 생성
@@ -359,6 +359,8 @@ def load_dataset_by_name(name: str, train_full_size:int):
         return init_math500(train_full_size)
     elif name == 'aime2025':
         return init_aime2025(train_full_size)
+    elif name == 'aime2024':
+        return init_aime2024(train_full_size)
     elif name == 'amc23':
         return init_amc23(train_full_size)
         
@@ -387,7 +389,7 @@ def parse_args():
         "--dataset",
         type=str,
         default="math500",
-        choices=["math500", 'aime2025', 'amc23'],
+        choices=["math500", 'aime2025', 'amc23', 'aime2024'],
         help="Which dataset loader to use",
     )
     parser.add_argument(
@@ -417,7 +419,7 @@ def parse_args():
     parser.add_argument(
         "--train_full_size",
         type=int,
-        default=10,
+        default=None,
         help="GEPA max metric calls budget",
     )
     parser.add_argument(
