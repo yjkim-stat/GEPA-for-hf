@@ -97,3 +97,57 @@ def init_aime2024(train_full_size=None):
     ]
 
     return trainset, valset, testset
+
+def init_minerva(train_full_size=None):
+    dataset_dir = 'math-ai/minervamath'
+    input_col_name = 'question'
+    answer_col_name = 'answer'
+    solution_col_name = None
+    # Load original training data
+    full_train = [
+        {"input": x[input_col_name], 
+         "additional_context": {"solution": ''}, 
+         "answer": "### " + str(x[answer_col_name])}
+        for x in load_dataset(dataset_dir)["test"]
+    ]
+    if train_full_size is not None:
+        full_train = full_train[:train_full_size]
+    
+    # Use only the first 5 samples for training
+    trainset = full_train[: len(full_train) // 2]
+    valset = full_train[len(full_train) // 2 :]
+
+    # Test split uses the entire 2025 dataset
+    testset = [
+        {"input": x[input_col_name], "answer": "### " + str(x[answer_col_name])}
+        for x in load_dataset(dataset_dir)["test"]
+    ]
+
+    return trainset, valset, testset
+
+def init_olympiad(train_full_size=None):
+    dataset_dir = 'Hothan/OlympiadBench'
+    input_col_name = 'question'
+    answer_col_name = 'final_answer'
+    solution_col_name = 'solution'
+    # Load original training data
+    full_train = [
+        {"input": x[input_col_name], 
+         "additional_context": {"solution": x[solution_col_name][0]}, 
+         "answer": "### " + str(x[answer_col_name][0])}
+        for x in load_dataset(dataset_dir, 'OE_TO_maths_en_COMP')["train"]
+    ]
+    if train_full_size is not None:
+        full_train = full_train[:train_full_size]
+    
+    # Use only the first 5 samples for training
+    trainset = full_train[: len(full_train) // 2]
+    valset = full_train[len(full_train) // 2 :]
+
+    # Test split uses the entire 2025 dataset
+    testset = [
+        {"input": x[input_col_name], "answer": "### " + str(x[answer_col_name][0])}
+        for x in load_dataset(dataset_dir, 'OE_TO_maths_en_COMP')["train"]
+    ]
+
+    return trainset, valset, testset

@@ -14,7 +14,7 @@ from transformers import (
 import wandb
 
 import gepa
-from util_data import init_math500, init_aime2025, init_amc23, init_aime2024
+from util_data import init_math500, init_aime2025, init_amc23, init_aime2024, init_minerva, init_olympiad
 
 from src.math_grader import grade_answer
 
@@ -363,7 +363,10 @@ def load_dataset_by_name(name: str, train_full_size:int):
         return init_aime2024(train_full_size)
     elif name == 'amc23':
         return init_amc23(train_full_size)
-        
+    elif name == 'minerva':
+        return init_minerva(train_full_size)
+    elif name == 'olympiad':
+        return init_olympiad(train_full_size)
     else:
         raise KeyError(f"Unsupported dataset: {name}")
 
@@ -389,8 +392,15 @@ def parse_args():
         "--dataset",
         type=str,
         default="math500",
-        choices=["math500", 'aime2025', 'amc23', 'aime2024'],
+        choices=["math500", 'aime2025', 'amc23', 'aime2024', 'minerva', 'olympiad'],
         help="Which dataset loader to use",
+    )
+    parser.add_argument(
+        "--prompt_version",
+        type=str,
+        default="default",
+        choices=["default", "stepPrompt"],
+        help="Seed prompt version"
     )
     parser.add_argument(
         "--cache_dir",
@@ -456,10 +466,11 @@ def main():
 
     model_tag = sanitize_name(args.model_name)
     dataset_name = args.dataset
+    prompt_version = args.prompt_version
 
     # --- 디렉토리들 ---
-    run_dir = os.path.join(args.run_root, f"{dataset_name}-{model_tag}")
-    results_dir = os.path.join(args.results_root, dataset_name, model_tag)
+    run_dir = os.path.join(f'{args.run_root}-prompt{prompt_version}', f"{dataset_name}-{model_tag}")
+    results_dir = os.path.join(f'{args.results_root}-prompt{prompt_version}', dataset_name, model_tag)
     os.makedirs(results_dir, exist_ok=True)
 
     print(f"Using model   : {args.model_name}")
@@ -479,34 +490,70 @@ def main():
 
 
     # --- 초기 시스템 프롬프트 ---
-    seed_prompt = {
-        "system_prompt": "You are a helpful assistant. You are given a question and you need to answer it. The answer should be given at the end of your response in exactly the format '### <final answer>'"
-    }    
+    SEED_PROMPTS = {
+        "default": {
+            "system_prompt": (
+                "You are a helpful assistant. "
+                "You are given a question and you need to answer it. "
+                "The answer should be given at the end of your response "
+                "in exactly the format '### <final answer>'"
+            )
+        },
+        "stepPrompt": {
+            "system_prompt": """
+    Solve the following math problem efficiently and clearly:
+
+    - For simple problems (2 steps or fewer):
+    Provide a concise solution with minimal explanation.
+
+    - For complex problems (3 steps or more):
+    Use this step-by-step format:
+
+    ## Step 1: [Concise description]
+    [Brief explanation and calculations]
+
+    ## Step 2: [Concise description]
+    [Brief explanation and calculations]
+
+    ...
+
+    Regardless of the approach, always conclude with:
+
+    Therefore, the final answer is: $\\boxed{answer}$. I hope it is correct.
+
+    Where [answer] is just the final number or expression that solves the problem.
+    """
+        },
+    }
+
     # seed_prompt = {
-    #     "system_prompt": """
-    #     Solve the following math problem efficiently and clearly:
+    #     "system_prompt": "You are a helpful assistant. You are given a question and you need to answer it. The answer should be given at the end of your response in exactly the format '### <final answer>'"
+    # }    
+    # # seed_prompt = {
+    # #     "system_prompt": """
+    # #     Solve the following math problem efficiently and clearly:
 
-    #     - For simple problems (2 steps or fewer):
-    #     Provide a concise solution with minimal explanation.
+    # #     - For simple problems (2 steps or fewer):
+    # #     Provide a concise solution with minimal explanation.
 
-    #     - For complex problems (3 steps or more):
-    #     Use this step-by-step format:
+    # #     - For complex problems (3 steps or more):
+    # #     Use this step-by-step format:
 
-    #     ## Step 1: [Concise description]
-    #     [Brief explanation and calculations]
+    # #     ## Step 1: [Concise description]
+    # #     [Brief explanation and calculations]
 
-    #     ## Step 2: [Concise description]
-    #     [Brief explanation and calculations]
+    # #     ## Step 2: [Concise description]
+    # #     [Brief explanation and calculations]
 
-    #     ...
+    # #     ...
 
-    #     Regardless of the approach, always conclude with:
+    # #     Regardless of the approach, always conclude with:
 
-    #     Therefore, the final answer is: $\\boxed{answer}$. I hope it is correct.
+    # #     Therefore, the final answer is: $\\boxed{answer}$. I hope it is correct.
 
-    #     Where [answer] is just the final number or expression that solves the problem.
-    #     """
-    # }
+    # #     Where [answer] is just the final number or expression that solves the problem.
+    # #     """
+    # # }
 
     # use_merge=True
     use_merge=False
