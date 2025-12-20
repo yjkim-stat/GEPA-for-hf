@@ -1,7 +1,7 @@
 scripts/_*
 wandb
 results*
-runs
+runs*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

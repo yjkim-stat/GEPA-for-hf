@@ -559,7 +559,7 @@ def main():
     use_merge=False
     # --- GEPA 최적화 ---
     gepa_kwargs: Dict[str, Any] = dict(
-        seed_candidate=seed_prompt,
+        seed_candidate=SEED_PROMPTS[args.prompt_version],
         trainset=trainset,
         valset=valset,
         task_lm=task_lm,
