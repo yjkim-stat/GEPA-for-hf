@@ -79,6 +79,32 @@ def build_model_and_tokenizer(model_name: str, cache_dir: str | None) -> tuple[A
         pad_token = tokenizer.decode(pad_id)
         model.generation_config.pad_token_id = pad_id
         model.generation_config.eos_token_id = eos_id
+    elif 'qwen' in model_name.lower():
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name,
+            cache_dir=cache_dir,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+            quantization_config=BitsAndBytesConfig(**quantization_config),
+            cache_dir=cache_dir,
+            attn_implementation=os.getenv("ATTN_IMPLEMENTATION", "flash_attention_2"),
+            token=os.getenv("HF_TOKEN"),
+        )
+
+        step_ids = tokenizer.encode("<|endoftext|>", add_special_tokens=False)
+
+        eos_id = tokenizer.encode(
+            "<|endoftext|>", add_special_tokens=False
+        )[0]
+        pad_id = eos_id
+        pad_token = tokenizer.decode(pad_id)
+        model.generation_config.pad_token_id = pad_id
+        model.generation_config.eos_token_id = eos_id
     elif 'gemma' in model_name:
 
         tokenizer = AutoTokenizer.from_pretrained(
